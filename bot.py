@@ -2,6 +2,7 @@ import os
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
+import yt_dlp
 
 # የቴሌግራም ቦት ቶከን
 TOKEN = "9106323264:AAFZw0cRU4teUFarImydtfd5DwIIe-zcuuc"
@@ -24,13 +25,44 @@ threading.Thread(target=run_web_server, daemon=True).start()
 
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
-    bot.reply_to(message, "ሰላም ሚፍታህ! የ Youtube ቪዲዮ ማውረጃ ቦትዎ በነፃ ሰርቨር ላይ 24 ሰዓት ሙሉ በሰላም እየሰራ ነው። 🔗 ሊንክ ይላኩልኝ!")
+    bot.reply_to(message, "ሰላም ሚፍታህ! የ **YouTube፣ Instagram፣ Pinterest እና TikTok** ቪዲዮዎችን ማውረጃ ቦትዎ ዝግጁ ነው። እባክዎ ከየትኛውም ፕላትፎርም የፈለጉትን ሊንክ ይላኩልኝ! 🔗")
 
 @bot.message_handler(func=lambda message: True)
-def echo_all(message):
-    bot.reply_to(message, f"ሊንኩ ተቀብሏል: {message.text}\n(ማውረድ የሚጀምርበት ኮድ ይቀጥላል)")
+def download_video(message):
+    url = message.text.strip()
+    if not url.startswith("http"):
+        bot.reply_to(message, "⚠️ እባክዎ ትክክለኛ የቪዲዮ ሊንክ (YouTube, Instagram, Pinterest, TikTok) ይላኩ!")
+        return
+
+    processing_msg = bot.reply_to(message, "⏳ ቪዲዮው እየወረደ ነው, እባክዎ ትንሽ ይጠብቁ...")
+
+    output_template = '%(id)s.%(ext)s'
+    ydl_opts = {
+        'outtmpl': output_template,
+        'format': 'best/bestvideo+bestaudio/best',
+    }
+
+    filename = None
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(info)
+
+        with open(filename, 'rb') as video_file:
+            bot.send_video(message.chat.id, video_file, caption="✅ በተሳካ ሁኔታ ወርዷል!")
+
+        # ፋይሉ ከወረደ በኋላ ከሰርቨር መሰረዝ
+        if filename and os.path.exists(filename):
+            os.remove(filename)
+
+        bot.delete_message(message.chat.id, processing_msg.message_id)
+
+    except Exception as e:
+        if filename and os.path.exists(filename):
+            os.remove(filename)
+        bot.edit_message_text(f"❌ ማውረድ አልተቻለም: {str(e)[:100]}", message.chat.id, processing_msg.message_id)
 
 # ቦቱን ማስጀመር
 if __name__ == "__main__":
     bot.infinity_polling()
-  
+        
